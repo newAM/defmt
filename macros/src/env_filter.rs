@@ -12,17 +12,17 @@ pub(crate) struct EnvFilter {
 impl EnvFilter {
     pub(crate) fn from_env_var() -> Self {
         let defmt_log = env::var("DEFMT_LOG").ok();
-        let cargo_pkg_name =
-            env::var("CARGO_PKG_NAME").unwrap_or_else(|_| abort_call_site!("TODO"));
+        let cargo_crate_name =
+            env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| abort_call_site!("TODO"));
 
-        Self::new(defmt_log.as_deref(), &cargo_pkg_name)
+        Self::new(defmt_log.as_deref(), &cargo_crate_name)
     }
 
-    fn new(defmt_log: Option<&str>, cargo_pkg_name: &str) -> Self {
+    fn new(defmt_log: Option<&str>, cargo_crate_name: &str) -> Self {
         // match `env_logger` behavior
         const DEFAULT_LEVEL: Level = Level::Trace;
 
-        let caller_crate = cargo_pkg_name;
+        let caller_crate = cargo_crate_name;
 
         let entries = if let Some(input) = defmt_log {
             input
