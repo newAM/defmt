@@ -6,7 +6,7 @@ mod env_filter;
 mod symbol;
 
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{hash_map::DefaultHasher, BTreeSet},
     convert::TryFrom,
     fmt::Write as _,
     hash::{Hash, Hasher},
@@ -449,19 +449,9 @@ fn log(level: Level, log: FormatArgs) -> TokenStream2 {
 
     let sym = mksym(&ls, level.as_str(), true);
     let env_filter = EnvFilter::from_env_var();
-    let logging_enabled = level >= env_filter.level();
-    if logging_enabled {
-        quote!(
-            match (#(&(#args)),*) {
-                (#(#pats),*) => {
-                    defmt::export::acquire();
-                    defmt::export::header(&#sym);
-                    #(#exprs;)*
-                    defmt::export::release()
-                }
-            }
-        )
-    } else {
+    let paths_to_check = env_filter.paths_for_level(level);
+
+    if paths_to_check.is_empty() {
         // if logging is disabled match args, so they are not unused
         quote!({
             // if logging is disabled match args, so they are not unused
@@ -469,7 +459,52 @@ fn log(level: Level, log: FormatArgs) -> TokenStream2 {
                 _ => {}
             }
         })
+    } else {
+        let path_check = generate_path_check(&paths_to_check);
+
+        quote!(
+            match (#(&(#args)),*) {
+                (#(#pats),*) => {
+                    if #path_check {
+                        defmt::export::acquire();
+                        defmt::export::header(&#sym);
+                        #(#exprs;)*
+                        defmt::export::release()
+                    }
+                }
+            }
+        )
     }
+}
+
+fn generate_path_check(paths: &BTreeSet<&str>) -> TokenStream2 {
+    let conds = paths
+        .iter()
+        .map(|needle| {
+            let needle = needle.as_bytes();
+            let needle_len = needle.len();
+            let byte_checks = needle
+                .iter()
+                .enumerate()
+                .map(|(index, byte)| quote!(haystack[#index] == #byte))
+                .collect::<Vec<_>>();
+
+            quote!(if #needle_len > haystack.len() {
+                false
+            } else {
+                #(#byte_checks &&)* true
+            })
+        })
+        .collect::<Vec<_>>();
+
+    quote!({
+        const fn check() -> bool {
+            let haystack = module_path!().as_bytes();
+            false #(|| #conds)*
+        }
+
+        check()
+    })
 }
 
 struct DbgArgs {
