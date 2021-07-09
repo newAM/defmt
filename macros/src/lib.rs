@@ -489,10 +489,23 @@ fn generate_path_check(paths: &BTreeSet<&str>) -> TokenStream2 {
                 .map(|(index, byte)| quote!(haystack[#index] == #byte))
                 .collect::<Vec<_>>();
 
-            quote!(if #needle_len > haystack.len() {
-                false
-            } else {
-                #(#byte_checks &&)* true
+            quote!(
+                // start of const-context `[u8]::starts_with(needle)`
+                if #needle_len > haystack.len() {
+                    false
+                } else {
+                    #(#byte_checks &&)*
+                // end of const-context `[u8]::starts_with`
+
+                // check that what follows the `needle` is the end of a path segment
+                if #needle_len == haystack.len() {
+                    true
+                } else {
+                    // `haystack` comes from `module_path!`; we assume it's well-formed so we
+                    // don't check *everything* that comes after `needle`; just a single character of
+                    // what should be the path separator ("::")
+                    haystack[#needle_len] == b':'
+                }
             })
         })
         .collect::<Vec<_>>();
