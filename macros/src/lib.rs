@@ -6,7 +6,7 @@ mod env_filter;
 mod symbol;
 
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeSet},
+    collections::hash_map::DefaultHasher,
     convert::TryFrom,
     fmt::Write as _,
     hash::{Hash, Hasher},
@@ -449,23 +449,12 @@ fn log(level: Level, log: FormatArgs) -> TokenStream2 {
 
     let sym = mksym(&ls, level.as_str(), true);
     let env_filter = EnvFilter::from_env_var();
-    let paths_to_check = env_filter.paths_for_level(level);
 
-    if paths_to_check.is_empty() {
-        // if logging is disabled match args, so they are not unused
-        quote!({
-            // if logging is disabled match args, so they are not unused
-            match (#(&(#args)),*) {
-                _ => {}
-            }
-        })
-    } else {
-        let path_check = generate_path_check(&paths_to_check);
-
+    if let Some(filter_check) = env_filter.path_check(level) {
         quote!(
             match (#(&(#args)),*) {
                 (#(#pats),*) => {
-                    if #path_check {
+                    if #filter_check {
                         defmt::export::acquire();
                         defmt::export::header(&#sym);
                         #(#exprs;)*
@@ -474,50 +463,14 @@ fn log(level: Level, log: FormatArgs) -> TokenStream2 {
                 }
             }
         )
-    }
-}
-
-fn generate_path_check(paths: &BTreeSet<&str>) -> TokenStream2 {
-    let conds = paths
-        .iter()
-        .map(|needle| {
-            let needle = needle.as_bytes();
-            let needle_len = needle.len();
-            let byte_checks = needle
-                .iter()
-                .enumerate()
-                .map(|(index, byte)| quote!(haystack[#index] == #byte))
-                .collect::<Vec<_>>();
-
-            quote!(
-                // start of const-context `[u8]::starts_with(needle)`
-                if #needle_len > haystack.len() {
-                    false
-                } else {
-                    #(#byte_checks &&)*
-                // end of const-context `[u8]::starts_with`
-
-                // check that what follows the `needle` is the end of a path segment
-                if #needle_len == haystack.len() {
-                    true
-                } else {
-                    // `haystack` comes from `module_path!`; we assume it's well-formed so we
-                    // don't check *everything* that comes after `needle`; just a single character of
-                    // what should be the path separator ("::")
-                    haystack[#needle_len] == b':'
-                }
-            })
+    } else {
+        // if logging is disabled match args, so they are not unused
+        quote!({
+            match (#(&(#args)),*) {
+                _ => {}
+            }
         })
-        .collect::<Vec<_>>();
-
-    quote!({
-        const fn check() -> bool {
-            let haystack = module_path!().as_bytes();
-            false #(|| #conds)*
-        }
-
-        check()
-    })
+    }
 }
 
 struct DbgArgs {

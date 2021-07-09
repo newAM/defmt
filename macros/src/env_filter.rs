@@ -1,10 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+};
 // TODO use `proc_macro_error` crate
 use std::panic as abort_call_site;
 
-use std::env;
-
 use defmt_parser::Level;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::quote;
 
 pub(crate) struct EnvFilter {
     entries: BTreeMap<String, Level>,
@@ -53,7 +56,60 @@ impl EnvFilter {
         EnvFilter { entries }
     }
 
-    pub(crate) fn paths_for_level(&self, level: Level) -> BTreeSet<&str> {
+    /// Builds a compile-time check that returns `true` when `module_path!` can emit logs at the
+    /// requested log `level`
+    ///
+    /// Returns `None` if the caller crate (at any module path) will never emit logs at requested log `level`
+    pub(crate) fn path_check(&self, level: Level) -> Option<TokenStream2> {
+        let paths = self.paths_for_level(level);
+
+        if paths.is_empty() {
+            return None;
+        }
+
+        let conds = paths
+            .iter()
+            .map(|needle| {
+                let needle = needle.as_bytes();
+                let needle_len = needle.len();
+                let byte_checks = needle
+                    .iter()
+                    .enumerate()
+                    .map(|(index, byte)| quote!(haystack[#index] == #byte))
+                    .collect::<Vec<_>>();
+
+                quote!(
+                    // start of const-context `[u8]::starts_with(needle)`
+                    if #needle_len > haystack.len() {
+                        false
+                    } else {
+                        #(#byte_checks &&)*
+                    // end of const-context `[u8]::starts_with`
+
+                    // check that what follows the `needle` is the end of a path segment
+                    if #needle_len == haystack.len() {
+                        true
+                    } else {
+                        // `haystack` comes from `module_path!`; we assume it's well-formed so we
+                        // don't check *everything* that comes after `needle`; just a single character of
+                        // what should be the path separator ("::")
+                        haystack[#needle_len] == b':'
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Some(quote!({
+            const fn check() -> bool {
+                let haystack = module_path!().as_bytes();
+                false #(|| #conds)*
+            }
+
+            check()
+        }))
+    }
+
+    fn paths_for_level(&self, level: Level) -> BTreeSet<&str> {
         self.entries
             .iter()
             .rev()
