@@ -13,7 +13,8 @@ use syn::Ident;
 #[derive(Debug)]
 pub(crate) struct EnvFilter {
     // key = module_path
-    entries: BTreeMap<String, Level>,
+    // level = None is used for the pseudo-level "off"
+    entries: BTreeMap<String, Option<Level>>,
 }
 
 impl EnvFilter {
@@ -27,8 +28,8 @@ impl EnvFilter {
 
     fn new(defmt_log: Option<&str>, cargo_crate_name: &str) -> Self {
         // match `env_logger` behavior
-        const LEVEL_WHEN_LEVEL_IS_NOT_SPECIFIED: Level = Level::Trace;
-        const LEVEL_WHEN_NOTHING_IS_SPECIFIED: Level = Level::Error;
+        const LEVEL_WHEN_LEVEL_IS_NOT_SPECIFIED: Option<Level> = Some(Level::Trace);
+        const LEVEL_WHEN_NOTHING_IS_SPECIFIED: Option<Level> = Some(Level::Error);
 
         let caller_crate = cargo_crate_name;
 
@@ -101,8 +102,11 @@ impl EnvFilter {
 
                     // check that what follows the `needle` is the end of a path segment
                     if #needle_len == haystack.len() {
+                        // end of the entire module path
                         true
                     } else {
+                        // end of module path _segment_
+                        //
                         // `haystack` comes from `module_path!`; we assume it's well-formed so we
                         // don't check *everything* that comes after `needle`; just a single character of
                         // what should be the path separator ("::")
@@ -127,26 +131,30 @@ impl EnvFilter {
             .iter()
             .rev()
             .filter_map(|(module_path, min_level)| {
-                if level >= *min_level {
-                    Some(module_path.as_str())
-                } else {
-                    None
-                }
+                // `min_level == None` means "off" so exclude the module path in that case
+                min_level.and_then(|min_level| {
+                    if level >= min_level {
+                        Some(module_path.as_str())
+                    } else {
+                        None
+                    }
+                })
             })
             .collect()
     }
 }
 
 // TODO should be `impl FromStr for Level`
-fn from_str(s: &str) -> Result<Level, ()> {
-    Ok(match s {
+fn from_str(s: &str) -> Result<Option<Level>, ()> {
+    Ok(Some(match s {
         "debug" => Level::Debug,
         "info" => Level::Info,
         "error" => Level::Error,
         "trace" => Level::Trace,
         "warn" => Level::Warn,
+        "off" => return Ok(None),
         _ => return Err(()),
-    })
+    }))
 }
 
 fn validate_module_path(path: &str) {
@@ -238,6 +246,22 @@ mod tests {
             env_filter.paths_for_level(Level::Debug)
         );
         assert_eq!(btreeset![], env_filter.paths_for_level(Level::Trace));
+    }
+
+    #[test]
+    fn blanket_off() {
+        let env_filter = EnvFilter::new(Some("off"), "krate");
+        assert_eq!(btreeset![], env_filter.paths_for_level(Level::Error));
+    }
+
+    #[test]
+    fn blanket_off_plus_override() {
+        let env_filter = EnvFilter::new(Some("krate::module=error,off"), "krate");
+        assert_eq!(
+            btreeset!["krate::module"],
+            env_filter.paths_for_level(Level::Error)
+        );
+        assert_eq!(btreeset![], env_filter.paths_for_level(Level::Warn));
     }
 
     #[ignore = "TODO(optimization): impl & more test cases"]
