@@ -8,6 +8,7 @@ use std::panic as abort_call_site;
 use defmt_parser::Level;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use syn::Ident;
 
 pub(crate) struct EnvFilter {
     entries: BTreeMap<String, Level>,
@@ -142,8 +143,10 @@ fn validate_module_path(path: &str) {
     }
 }
 
-fn validate_identifier(_ident: &str) {
-    // TODO re-use `syn` logic (?)
+fn validate_identifier(ident: &str) {
+    if syn::parse_str::<Ident>(ident).is_err() {
+        abort_call_site!("`{}` is not a valid identifier", ident)
+    }
 }
 
 #[cfg(test)]
@@ -201,7 +204,6 @@ mod tests {
         assert_eq!(btreeset![], env_filter.paths_for_level(Level::Debug));
     }
 
-    #[ignore = "TODO"]
     #[test]
     #[should_panic]
     fn invalid_identifier() {
