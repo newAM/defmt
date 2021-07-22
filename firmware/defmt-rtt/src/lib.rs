@@ -48,7 +48,15 @@ unsafe impl defmt::Logger for Logger {
     }
 
     fn flush() {
-        todo!()
+        Self::acquire();
+
+        // SAFETY: TODO
+        unsafe { handle().flush() };
+
+        // SAFETY: TODO
+        unsafe {
+            Self::release();
+        }
     }
 
     unsafe fn release() {
@@ -175,6 +183,10 @@ impl Channel {
             .store(write.wrapping_add(len) % SIZE, Ordering::Release);
 
         len
+    }
+
+    fn flush(&self) {
+        todo!("busy wait")
     }
 }
 
