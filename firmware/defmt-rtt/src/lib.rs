@@ -186,7 +186,35 @@ impl Channel {
     }
 
     fn flush(&self) {
-        todo!("busy wait")
+        // TODO: What is the best `Ordering`? The current ones are taken from `fn blocking_write`.
+        let read = || self.read.load(Ordering::Relaxed);
+        let write = || self.write.load(Ordering::Acquire);
+
+        // If read-pointer is still 0, probably no host is connected
+        // TODO: What happens if flush is called before any logging call? Assumption: Probably we will just
+        // return, because nothing is written to the Channel, so both read and write pointer should be 0.
+        if read() == 0 {
+            // TODO: Do we want to return an error or return silently?
+            return;
+        }
+
+        let prev_read = 0;
+        let mut cycle_count = 0;
+        const CHECK_CYCLE: usize = 100;
+
+        // busy wait
+        while read() != write() {
+            // did the write pointer progress in the last `CHECK_CYCLE` loop cycles?
+            if cycle_count % CHECK_CYCLE != 0 {
+                cycle_count += 1;
+            // TODO: Is it bad to call read a second time instead of using the value from the while-condition?
+            //       Assumption: It might have changed, but this isn't really problematic, cause we want to catch if it does *NOT* progress.
+            } else if read() == prev_read {
+                return;
+            } else {
+                cycle_count = 0;
+            }
+        }
     }
 }
 
