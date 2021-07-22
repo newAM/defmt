@@ -84,6 +84,9 @@ pub unsafe trait Logger {
     /// Panics if already acquired in the current execution context. Otherwise it must never fail.
     fn acquire();
 
+    /// Block until host has read all pending data
+    fn flush();
+
     /// Releases the global logger in the current execution context.
     ///
     /// # Safety
