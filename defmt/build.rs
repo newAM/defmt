@@ -1,6 +1,13 @@
 use std::{env, error::Error, fs, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn Error>> {
+    if env::var("CARGO_CFG_TARGET_OS") == Ok("windows".to_string()) {
+        return Err(r#"Compiling for Windows as a target is not supported.
+Change your target to an embedded device, such as thumbv7em-none-eabi.
+For more details see: https://github.com/knurling-rs/defmt/issues/463"#
+            .into());
+    }
+
     // Put the linker script somewhere the linker can find it
     let out = &PathBuf::from(env::var("OUT_DIR")?);
     let linker_script = fs::read_to_string("defmt.x.in")?;
