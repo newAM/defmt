@@ -12,6 +12,10 @@ The fastest way to get started with `defmt` is to use our [app-template] to set 
 
 For more details about the framework check the book at https://defmt.ferrous-systems.com
 
+## Memory use
+
+When in a tight memory situation and logging over RTT, the buffer size (default: 1024 bytes) can be configured with the `DEFMT_RTT_BUFFER_SIZE` environment variable. Use a power of 2 for best performance.
+
 ## Support
 
 `defmt-rtt` is part of the [Knurling] project, [Ferrous Systems]' effort at
