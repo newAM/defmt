@@ -17,7 +17,7 @@ use std::{borrow::Cow, ops::Range, str::FromStr};
 pub use crate::types::Type;
 
 /// A parameter of the form `{{0=Type:hint}}` in a format string.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Parameter {
     /// The argument index to display at this position.
     pub index: usize,
@@ -28,14 +28,14 @@ pub struct Parameter {
 }
 
 /// Precision of ISO8601 datetime
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TimePrecision {
     Millis,
     Seconds,
 }
 
 /// All display hints
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DisplayHint {
     NoHint {
         zero_pad: usize,
@@ -133,7 +133,7 @@ fn parse_display_hint(mut s: &str) -> Option<DisplayHint> {
 }
 
 /// A part of a format string.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Fragment<'f> {
     /// A literal string (eg. `"literal "` in `"literal {:?}"`).
     Literal(Cow<'f, str>),
@@ -170,7 +170,7 @@ struct Param {
 }
 
 /// The log level
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Level {
     Trace,
     Debug,
@@ -246,7 +246,7 @@ fn parse_array(mut s: &str) -> Result<usize, Cow<'static, str>> {
 
     // consume length
     let after_len = s
-        .find(|c: char| !c.is_digit(10))
+        .find(|c: char| !c.is_ascii_digit())
         .ok_or("invalid array specifier (missing `]`)")?;
     let len = s[..after_len].parse::<usize>().map_err(|e| e.to_string())?;
     s = &s[after_len..];
@@ -260,7 +260,7 @@ fn parse_array(mut s: &str) -> Result<usize, Cow<'static, str>> {
 }
 
 /// Parser mode
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParserMode {
     /// Rejects unknown display hints
     Strict,
@@ -278,8 +278,8 @@ fn parse_param(mut input: &str, mode: ParserMode) -> Result<Param, Cow<'static, 
     // First, optional argument index.
     let mut index = None;
     let index_end = input
-        .find(|c: char| !c.is_digit(10))
-        .unwrap_or_else(|| input.len());
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(input.len());
 
     if index_end != 0 {
         index = Some(
@@ -298,7 +298,7 @@ fn parse_param(mut input: &str, mode: ParserMode) -> Result<Param, Cow<'static, 
         input = &input[TYPE_PREFIX.len()..];
 
         // type is delimited by `HINT_PREFIX` or end-of-string
-        let type_end = input.find(HINT_PREFIX).unwrap_or_else(|| input.len());
+        let type_end = input.find(HINT_PREFIX).unwrap_or(input.len());
         let type_fragment = &input[..type_end];
 
         const FORMAT_ARRAY_START: &str = "[?;";
@@ -348,13 +348,13 @@ fn parse_param(mut input: &str, mode: ParserMode) -> Result<Param, Cow<'static, 
             Some(a) => a,
             None => match mode {
                 ParserMode::Strict => {
-                    return Err(format!("unknown display hint: {:?}", input).into());
+                    return Err(format!("unknown display hint: {input:?}").into());
                 }
                 ParserMode::ForwardsCompatible => DisplayHint::Unknown(input.to_owned()),
             },
         });
     } else if !input.is_empty() {
-        return Err(format!("unexpected content {:?} in format string", input).into());
+        return Err(format!("unexpected content {input:?} in format string").into());
     }
 
     Ok(Param { index, ty, hint })
@@ -516,7 +516,7 @@ pub fn parse<'f>(
     // Check that argument indices are dense (all arguments must be used).
     for (index, arg) in args.iter().enumerate() {
         if arg.is_none() {
-            return Err(format!("argument {} is not used in this format string", index).into());
+            return Err(format!("argument {index} is not used in this format string").into());
         }
     }
 

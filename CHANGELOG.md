@@ -7,18 +7,89 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-- None
+## defmt-decoder v0.3.4, defmt-print v0.3.4
 
-## [v0.3.1] - 2021-11-26
+- [#729]: Release `defmt-decoder v0.3.4`, `defmt-print v0.3.4`
+- [#726]: `defmt-decoder`: Remove difference in favor of dissimilar
+- [#725]: `defmt-decoder`: Replace chrono with time
+- [#719]: `defmt-print`: Fix panic
+- [#715]: `xtask`: Update `clap` to version `4`
+- [#710]: `CI`: Update CI
+- [#706]: `defmt`, `defmt-decoder`, `defmt-itm`, `defmt-macros`, `defmt-parser`, `defmt-print`, `defmt-test-macros`: Satisfy clippy
 
+[#729]: https://github.com/knurling-rs/defmt/pull/729
+[#726]: https://github.com/knurling-rs/defmt/pull/726
+[#725]: https://github.com/knurling-rs/defmt/pull/725
+[#715]: https://github.com/knurling-rs/defmt/pull/715
+[#710]: https://github.com/knurling-rs/defmt/pull/710
+[#706]: https://github.com/knurling-rs/defmt/pull/706
+
+## defmt-decoder v0.3.3, defmt-macros v0.3.3, defmt-print v0.3.3, vdefmt-rtt 0.4.0
+- [#704]: Release `defmt-macros 0.3.3`, `defmt-print 0.3.3`, `defmt-rtt 0.4.0`
+- [#703]: `defmt-print`: Update to `clap 4.0`.
+- [#701]: `defmt-rtt`: Pre-relase cleanup
+- [#695]: `defmt-rtt`: Refactor rtt [3/2]
+- [#689]: `defmt-rtt`: Update to critical-section 1.0
+- [#692]: `defmt-macros`: Wrap const fn in const item to ensure compile-time-evaluation.
+- [#690]: `defmt-decoder`, `defmt-parser`: Satisfy clippy
+- [#688]: Release `defmt-decoder 0.3.3`
+- [#687]: `CI`: Re-enable `qemu-snapshot (nightly)` tests
+- [#686]: `CI`: Temporarily disable `qemu-snapshot (nightly)`
+- [#684]: `defmt-macros`: Fix `syn` dependency version.
+- [#683]: `defmt-rtt`: Make sure the whole RTT structure is in RAM
+- [#682]: `defmt-print`: exit when stdin is closed
+- [#681]: `defmt-decoder`, `defmt-parser`:Make use of i/o locking being static since rust `1.61`.
+- [#679]: `CI`: Add changelog enforcer
+- [#678]: `defmt`, `defmt-decoder`, `defmt-macros`, `defmt-parser`: Satisfy clippy
+
+[#704]: https://github.com/knurling-rs/defmt/pull/704
+[#703]: https://github.com/knurling-rs/defmt/pull/703
+[#701]: https://github.com/knurling-rs/defmt/pull/701
+[#695]: https://github.com/knurling-rs/defmt/pull/695
+[#692]: https://github.com/knurling-rs/defmt/pull/692
+[#690]: https://github.com/knurling-rs/defmt/pull/690
+[#688]: https://github.com/knurling-rs/defmt/pull/688
+[#687]: https://github.com/knurling-rs/defmt/pull/687
+[#686]: https://github.com/knurling-rs/defmt/pull/686
+[#684]: https://github.com/knurling-rs/defmt/pull/684
+[#683]: https://github.com/knurling-rs/defmt/pull/683
+[#682]: https://github.com/knurling-rs/defmt/pull/682
+[#681]: https://github.com/knurling-rs/defmt/pull/681
+[#679]: https://github.com/knurling-rs/defmt/pull/679
+[#678]: https://github.com/knurling-rs/defmt/pull/678
+[#719]: https://github.com/knurling-rs/defmt/pull/719
+
+## [v0.3.2] - 2022-05-31
+
+- [#675]: Release `defmt 0.3.2` and fix `defmt-macros`-releated compile-error
+- [#669]: Refine docs for `--json` flag
+
+## [v0.3.1] - 2022-03-10
+
+### Added
+
+- [#662]: `#[derive(Format)]` now accepts attribute fields to format fields using the `Debug2Format` adapter instead of a `Format` implementation.
+- [#661]: Add tests for Cell types
+- [#656]: Implement `defmt::Format` for `Cell` and `RefCell`
+- [#630]: Add test instructions to README.md
+
+[#662]: https://github.com/knurling-rs/defmt/pull/662
+[#661]: https://github.com/knurling-rs/defmt/pull/661
+[#656]: https://github.com/knurling-rs/defmt/pull/656
+[#630]: https://github.com/knurling-rs/defmt/pull/630
+
+### Changed
+
+- [#659]: mark extern::acquire() and extern::release() as unsafe. this is not a breaking change; this is an internal API
+- [#640]: use crate [critical-section](https://crates.io/crates/critical-section) in defmt-rtt
 - [#634]: update ELF parsing dependencies
 - [#633]: make RTT buffer size configurable
-- [#630]: Add test instructions to README.md
 - [#626]: Make errror message more meaningful in case of version-mismatch
 
+[#659]: https://github.com/knurling-rs/defmt/pull/659
+[#640]: https://github.com/knurling-rs/defmt/pull/640
 [#634]: https://github.com/knurling-rs/defmt/pull/634
 [#633]: https://github.com/knurling-rs/defmt/pull/633
-[#630]: https://github.com/knurling-rs/defmt/pull/630
 [#626]: https://github.com/knurling-rs/defmt/pull/626
 
 ## [v0.3.0] - 2021-11-09
@@ -31,7 +102,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - [#610]: `defmt-print`: Log if malformed frame gets skipped
 - [#547]: Migration guide `v0.2.x` to `v0.3.0`
 - [#604]: defmt-test: `#[cfg(test)]` the `#[defmt_test::tests]` module
-- [#616]: Update user guide part of the book 
+- [#616]: Update user guide part of the book
 - [#615]: Document how to deal with backward compatibility breakage
 - [#614]: Bugfix: decoder breaks with pipe symbol
 - [#605]: Properly handle the `off` pseudo-level in presence of nested logging directives
@@ -180,7 +251,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 
 - [#488] Structure `impl Format`s into multiple files
-- [#496] Bump build-dep `semver` to  `1.0`
+- [#496] Bump build-dep `semver` to `1.0`
 - [#489] Structure lib
 - [#500] book: fix leftover old formatting syntax; typos
 - [#510] `CI`: Don't install MacOS dependency which is included by default
@@ -301,7 +372,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - rename `mod logger` to `log`
   - make `fn parse_*`, `fn get_locations`, `fn decode` methods of `struct Table`
   - various simplifications and restructuring of internal code
-- [#387] CI: bump timeout to 20 minutes 
+- [#387] CI: bump timeout to 20 minutes
 - [#389] defmt_decoder: Bump deps `object` and `gimli`
 
 ### Fixed
@@ -438,7 +509,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 Initial release
 
-[Unreleased]: https://github.com/knurling-rs/defmt/compare/defmt-v0.3.1...main
+[Unreleased]: https://github.com/knurling-rs/defmt/compare/defmt-v0.3.2...main
+[v0.3.2]: https://github.com/knurling-rs/defmt/compare/defmt-v0.3.1...defmt-v0.3.2
 [v0.3.1]: https://github.com/knurling-rs/defmt/compare/defmt-v0.3.0...defmt-v0.3.1
 [v0.3.0]: https://github.com/knurling-rs/defmt/compare/defmt-v0.2.3...defmt-v0.3.0
 [v0.2.3]: https://github.com/knurling-rs/defmt/compare/defmt-v0.2.2...defmt-v0.2.3

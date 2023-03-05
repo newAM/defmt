@@ -10,14 +10,28 @@ For a full list of defmt-test's capabilities, please refer to the documentation 
 
 [rust-analyzer]: https://rust-analyzer.github.io
 
-## Basic usage
+## Using `defmt-test` in a new project
 
-Start from the [`app-template`] and then run `cargo test -p testsuite` to run the unit tests:
+We suggest you start from the [`app-template`].
+From there you can execute `cargo test --lib` to run library unit tests, i.e. `#[test]` functions in the library crate (`src/lib.rs`).
 
 [`app-template`]: https://github.com/knurling-rs/app-template
 
 ``` console
-$ cargo test -p testsuite
+$ cargo test --lib
+(..)
+(1/1) running `it_works`...
+└─ app::unit_tests::__defmt_test_entry @ src/lib.rs:33
+all tests passed!
+└─ app::unit_tests::__defmt_test_entry @ src/lib.rs:28
+(..)
+(HOST) INFO  device halted without error
+```
+
+And execute `cargo test --test integration` to run integration tests, i.e. the `tests/integration.rs` file.
+
+``` console
+$ cargo test --test integration
 (..)
 0.000000 INFO  (1/2) running `assert_true`...
 └─ test::tests::__defmt_test_entry @ tests/test.rs:7
@@ -47,7 +61,66 @@ stack backtrace:
         at (..omitted..)
 ```
 
-NOTE unit tests will be executed sequentially
+NOTE all `#[test]` functions within a file are guaranteed to run sequentially
+
+## Adding `defmt-test` to an existing project
+
+If you want to add `defmt-test` to an existing Cargo project / package, for each *crate* that you want to test you need to do these changes in `Cargo.toml`:
+
+- add `defmt-test` as a `dev-dependency`
+- for each crate that you want to test, set `harness` to `false` to disable the default test harness, the `test` crate which depends on `std`. examples below
+
+``` toml
+# Cargo.toml
+
+# for the library crate (src/lib.rs)
+[lib]
+harness = false
+
+# for each crate in the `tests` directory
+[[test]]
+name = "test-name" # tests/test-name.rs
+harness = false
+
+[[test]]
+name = "second" # tests/second.rs
+harness = false
+```
+
+The other thing to be aware is that `cargo test` will compile *all* crates in the package, or workspace.
+This may include crates that you don't want to test, like `src/main.rs` or each crate in `src/bin` or `examples`.
+To identify which crates are being compiled by `cargo test`, run `cargo test -j1 -v` and look for the `--crate-name` flag passed to each `rustc` invocation.
+
+To test only a subset of the crates in the package / workspace you have two options:
+
+- you can specify each crate when you invoke `cargo test`. for example, `cargo test --lib --test integration` tests two crates: the library crate (`src/lib.rs`) and `tests/integration.rs`
+- you can disable tests for the crates that you don't want to test -- example below -- and then you can use `cargo test` to test all crates that were not disabled.
+
+if you have this project structure
+
+``` console
+$ tree .
+.
+├── Cargo.toml
+├── src
+│  ├── lib.rs
+│  └── main.rs
+└── tests
+   └── integration.rs
+```
+
+and have `src/lib.rs` set up for tests but don't want to test `src/main.rs` you'll need to disable tests for `src/main.rs`
+
+``` toml
+# Cargo.toml
+[package]
+# ..
+name = "app"
+
+[[bin]] # <- add this section
+name = "app" # src/main.rs
+test = false
+```
 
 ## Adding state
 
@@ -70,6 +143,20 @@ mod tests {
         }
     }
 
+    // This function is called before each test case.
+    // It accesses the state created in `init`,
+    // though like with `test`, state access is optional.
+    #[before_each]
+    fn before_each(state: &mut super::MyState) {
+        defmt::println!("State flag before is {}", state.flag);
+    }
+
+    // This function is called after each test
+    #[after_each]
+    fn after_each(state: &mut super::MyState) {
+        defmt::println!("State flag after is {}", state.flag);
+    }
+
     // this unit test doesn't access the state
     #[test]
     fn assert_true() {
@@ -80,18 +167,27 @@ mod tests {
     #[test]
     fn assert_flag(state: &mut super::MyState) {
         assert!(state.flag)
+        state.flag = false;
     }
 }
 ```
 
 ``` console
 $ cargo test -p testsuite
-0.000000 INFO  (1/2) running `assert_true`...
-└─ test::tests::__defmt_test_entry @ tests/test.rs:11
-0.000001 INFO  (2/2) running `assert_flag`...
-└─ test::tests::__defmt_test_entry @ tests/test.rs:11
-0.000002 INFO  all tests passed!
-└─ test::tests::__defmt_test_entry @ tests/test.rs:11
+0.000000 (1/2) running `assert_true`...
+└─ integration::tests::__defmt_test_entry @ tests/integration.rs:37
+0.000001 State flag before is true
+└─ integration::tests::before_each @ tests/integration.rs:26
+0.000002 State flag after is true
+└─ integration::tests::after_each @ tests/integration.rs:32
+0.000003 (2/2) running `assert_flag`...
+└─ integration::tests::__defmt_test_entry @ tests/integration.rs:43
+0.000004 State flag before is true
+└─ integration::tests::before_each @ tests/integration.rs:26
+0.000005 State flag after is false
+└─ integration::tests::after_each @ tests/integration.rs:32
+0.000006 all tests passed!
+└─ integration::tests::__defmt_test_entry @ tests/integration.rs:11
 ```
 
 ## Test Outcome

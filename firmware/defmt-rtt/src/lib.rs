@@ -17,67 +17,78 @@
 //! is because the RTT buffer will fill up and writing will eventually halt the program execution.
 //!
 //! `defmt::flush` would also block forever in that case.
+//!
+//! # Critical section implementation
+//!
+//! This crate uses [`critical-section`](https://github.com/rust-embedded/critical-section) to ensure only one thread
+//! is writing to the buffer at a time. You must import a crate that provides a `critical-section` implementation
+//! suitable for the current target. See the `critical-section` README for details.
+//!
+//! For example, for single-core privileged-mode Cortex-M targets, you can add the following to your Cargo.toml.
+//!
+//! ```toml
+//! [dependencies]
+//! cortex-m = { version = "0.7.6", features = ["critical-section-single-core"]}
+//! ```
 
 #![no_std]
 
 mod channel;
+mod consts;
 
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use cortex_m::{interrupt, register};
-
-use crate::channel::Channel;
-
-mod consts;
-
-/// RTT buffer size. Default: 1024; can be customized by setting the `DEFMT_RTT_BUFFER_SIZE` environment variable.
-/// Use a power of 2 for best performance.
-use crate::consts::BUF_SIZE;
+use crate::{channel::Channel, consts::BUF_SIZE};
 
 #[defmt::global_logger]
 struct Logger;
 
 /// Global logger lock.
 static TAKEN: AtomicBool = AtomicBool::new(false);
-static INTERRUPTS_ACTIVE: AtomicBool = AtomicBool::new(false);
+static mut CS_RESTORE: critical_section::RestoreState = critical_section::RestoreState::invalid();
 static mut ENCODER: defmt::Encoder = defmt::Encoder::new();
 
 unsafe impl defmt::Logger for Logger {
     fn acquire() {
-        let primask = register::primask::read();
-        interrupt::disable();
+        // safety: Must be paired with corresponding call to release(), see below
+        let restore = unsafe { critical_section::acquire() };
 
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         if TAKEN.load(Ordering::Relaxed) {
             panic!("defmt logger taken reentrantly")
         }
 
-        // no need for CAS because interrupts are disabled
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         TAKEN.store(true, Ordering::Relaxed);
 
-        INTERRUPTS_ACTIVE.store(primask.is_active(), Ordering::Relaxed);
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
+        unsafe { CS_RESTORE = restore };
 
-        // safety: accessing the `static mut` is OK because we have disabled interrupts.
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         unsafe { ENCODER.start_frame(do_write) }
     }
 
     unsafe fn flush() {
-        // SAFETY: if we get here, the global logger mutex is currently acquired
+        // safety: accessing the `&'static _` is OK because we have acquired a critical section.
         handle().flush();
     }
 
     unsafe fn release() {
-        // safety: accessing the `static mut` is OK because we have disabled interrupts.
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         ENCODER.end_frame(do_write);
 
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         TAKEN.store(false, Ordering::Relaxed);
-        if INTERRUPTS_ACTIVE.load(Ordering::Relaxed) {
-            // re-enable interrupts
-            interrupt::enable()
-        }
+
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
+        let restore = CS_RESTORE;
+
+        // safety: Must be paired with corresponding call to acquire(), see above
+        critical_section::release(restore);
     }
 
     unsafe fn write(bytes: &[u8]) {
-        // safety: accessing the `static mut` is OK because we have disabled interrupts.
+        // safety: accessing the `static mut` is OK because we have acquired a critical section.
         ENCODER.write(bytes, do_write);
     }
 }
@@ -115,7 +126,7 @@ unsafe fn handle() -> &'static Channel {
         max_up_channels: 1,
         max_down_channels: 0,
         up_channel: Channel {
-            name: NAME as *const _ as *const u8,
+            name: &NAME as *const _ as *const u8,
             buffer: unsafe { &mut BUFFER as *mut _ as *mut u8 },
             size: BUF_SIZE,
             write: AtomicUsize::new(0),
@@ -128,7 +139,10 @@ unsafe fn handle() -> &'static Channel {
     #[cfg_attr(not(target_os = "macos"), link_section = ".uninit.defmt-rtt.BUFFER")]
     static mut BUFFER: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
-    static NAME: &[u8] = b"defmt\0";
+    // Place NAME in data section, so the whole RTT header can be read from RAM.
+    // This is useful if flash access gets disabled by the firmware at runtime.
+    #[link_section = ".data"]
+    static NAME: [u8; 6] = *b"defmt\0";
 
     &_SEGGER_RTT.up_channel
 }

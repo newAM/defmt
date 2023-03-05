@@ -5,23 +5,26 @@ use std::{
 };
 
 use anyhow::anyhow;
+use clap::Parser;
 use defmt_decoder::{DecodeError, Frame, Locations, Table};
-use structopt::StructOpt;
 
 /// Prints defmt-encoded logs to stdout
-#[derive(StructOpt)]
-#[structopt(name = "defmt-print")]
+#[derive(Parser)]
+#[command(name = "defmt-print")]
 struct Opts {
-    #[structopt(short, parse(from_os_str), required_unless_one(&["version"]))]
+    #[arg(short, required = true, conflicts_with("version"))]
     elf: Option<PathBuf>,
 
-    #[structopt(long)]
+    #[arg(long)]
+    json: bool,
+
+    #[arg(long)]
     show_skipped_frames: bool,
 
-    #[structopt(short, long)]
+    #[arg(short, long)]
     verbose: bool,
 
-    #[structopt(short = "V", long)]
+    #[arg(short = 'V', long)]
     version: bool,
 }
 
@@ -30,21 +33,22 @@ const READ_BUFFER_SIZE: usize = 1024;
 fn main() -> anyhow::Result<()> {
     let Opts {
         elf,
+        json,
         show_skipped_frames,
         verbose,
         version,
-    } = Opts::from_args();
+    } = Opts::parse();
 
     if version {
         return print_version();
     }
 
-    defmt_decoder::log::init_logger(verbose, move |metadata| match verbose {
+    defmt_decoder::log::init_logger(verbose, json, move |metadata| match verbose {
         false => defmt_decoder::log::is_defmt_frame(metadata), // We display *all* defmt frames, but nothing else.
         true => true,                                          // We display *all* frames.
     });
 
-    let bytes = fs::read(&elf.unwrap())?;
+    let bytes = fs::read(elf.unwrap())?;
 
     let table = Table::parse(&bytes)?.ok_or_else(|| anyhow!(".defmt data not found"))?;
     let locs = table.get_locations(&bytes)?;
@@ -60,12 +64,15 @@ fn main() -> anyhow::Result<()> {
     let mut stream_decoder = table.new_stream_decoder();
 
     let current_dir = env::current_dir()?;
-    let stdin = io::stdin();
-    let mut stdin = stdin.lock();
+    let mut stdin = io::stdin().lock();
 
     loop {
         // read from stdin and push it to the decoder
         let n = stdin.read(&mut buf)?;
+        // if 0 bytes where read, we reached EOF, so quit
+        if n == 0 {
+            break Ok(());
+        }
         stream_decoder.received(&buf[..n]);
 
         // decode the received data
@@ -100,12 +107,11 @@ fn forward_to_logger(frame: &Frame, location_info: LocationInfo) {
 fn location_info(locs: &Option<Locations>, frame: &Frame, current_dir: &Path) -> LocationInfo {
     let (mut file, mut line, mut mod_path) = (None, None, None);
 
-    // NOTE(`[]` indexing) all indices in `table` have been verified to exist in the `locs` map
-    let loc = locs.as_ref().map(|locs| &locs[&frame.index()]);
+    let loc = locs.as_ref().map(|locs| locs.get(&frame.index()));
 
-    if let Some(loc) = loc {
+    if let Some(Some(loc)) = loc {
         // try to get the relative path, else the full one
-        let path = loc.file.strip_prefix(&current_dir).unwrap_or(&loc.file);
+        let path = loc.file.strip_prefix(current_dir).unwrap_or(&loc.file);
 
         file = Some(path.display().to_string());
         line = Some(loc.line as u32);

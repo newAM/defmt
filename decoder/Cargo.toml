@@ -7,27 +7,42 @@ license = "MIT OR Apache-2.0"
 name = "defmt-decoder"
 readme = "../README.md"
 repository = "https://github.com/knurling-rs/defmt"
-version = "0.3.1"
+version = "0.3.4"
 
 [dependencies]
-defmt-parser = { path = "../parser", features = ["unstable"], version = "=0.3.0" }
+defmt-parser = { version = "=0.3.1", path = "../parser", features = [
+    "unstable",
+] }
 byteorder = "1"
 colored = "2"
 ryu = "1"
 
 # display
-chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+time = { version = "0.3", default-features = false, features = [
+    "alloc",
+    "formatting",
+    "large-dates",
+    "macros",
+] }
 
 # logger
-difference = "2"
+dissimilar = "1"
 log = { version = "0.4", features = ["std"] }
+defmt-json-schema = { version = "0.1", path = "./defmt-json-schema" }
 
 # elf2table
-anyhow = "1.0.45"
-gimli = { version = "0.26", default-features = false, features = ["read", "std"] }
-object = { version = "0.27", default-features = false, features = ["read_core", "elf", "std"] }
+anyhow = "1.0.65"
+gimli = { version = "0.27", default-features = false, features = [
+    "read",
+    "std",
+] }
+object = { version = "0.30", default-features = false, features = [
+    "read_core",
+    "elf",
+    "std",
+] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
 
 [features]
 # WARNING: API and wire format subject to change.
@@ -35,4 +50,4 @@ unstable = []
 
 [package.metadata.docs.rs]
 features = ["unstable"]
-rustdoc-args = [ "--cfg=docsrs" ]
+rustdoc-args = ["--cfg=docsrs"]

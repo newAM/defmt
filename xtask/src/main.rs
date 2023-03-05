@@ -1,10 +1,10 @@
 use std::{process::Command, str::FromStr, sync::Mutex};
 
 use anyhow::{anyhow, Context};
+use clap::{Parser, Subcommand};
 use colored::Colorize;
 use once_cell::sync::Lazy;
 use similar::{ChangeTag, TextDiff};
-use structopt::StructOpt;
 
 mod backcompat;
 mod targets;
@@ -32,7 +32,7 @@ const ALL_SNAPSHOT_TESTS: [&str; 12] = [
     "dbg",
 ];
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Snapshot(String);
 
 impl Snapshot {
@@ -56,19 +56,21 @@ impl FromStr for Snapshot {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 struct Options {
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     cmd: TestCommand,
+
     /// Treat compiler warnings as errors (`RUSTFLAGS="--deny warnings"`)
-    #[structopt(long, short)]
+    #[arg(long, short)]
     deny_warnings: bool,
+
     /// Keep target toolchains that were installed as dependency
-    #[structopt(long, short)]
+    #[arg(long, short)]
     keep_targets: bool,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Subcommand)]
 #[allow(clippy::enum_variant_names)]
 enum TestCommand {
     TestAll,
@@ -81,16 +83,15 @@ enum TestCommand {
     /// Run snapshot tests or optionally overwrite the expected output
     TestSnapshot {
         /// Overwrite the expected output instead of comparing it.
-        #[structopt(long)]
+        #[arg(long)]
         overwrite: bool,
         /// Runs a single snapshot test in Debug mode
-        #[structopt()]
         single: Option<Snapshot>,
     },
 }
 
 fn main() -> anyhow::Result<()> {
-    let opt: Options = Options::from_args();
+    let opt = Options::parse();
     let mut added_targets = None;
 
     match opt.cmd {
@@ -137,7 +138,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn do_test(test: impl FnOnce() -> anyhow::Result<()>, context: &str) {
-    test().unwrap_or_else(|e| ALL_ERRORS.lock().unwrap().push(format!("{}: {}", context, e)));
+    test().unwrap_or_else(|e| ALL_ERRORS.lock().unwrap().push(format!("{context}: {e}")));
 }
 
 fn test_host(deny_warnings: bool) {
@@ -372,7 +373,7 @@ fn test_single_snapshot(name: &str, features: &str, overwrite: bool) -> anyhow::
             };
             if let Some((sign, change)) = styled_change {
                 actual_matches_expected = false;
-                eprint!("{}{}", sign, change);
+                eprint!("{sign}{change}");
             }
         }
     }
@@ -392,7 +393,15 @@ fn test_book() {
         || {
             run_command(
                 "cargo",
-                &["build", "-p", "defmt", "--features", "unstable-test"],
+                &[
+                    "build",
+                    "-p",
+                    "defmt",
+                    "-p",
+                    "defmt-decoder",
+                    "--features",
+                    "unstable-test",
+                ],
                 None,
                 &[],
             )
@@ -401,10 +410,25 @@ fn test_book() {
     );
 
     do_test(
+        || run_command("cargo", &["build", "-p", "cortex-m"], Some("firmware"), &[]),
+        "book",
+    );
+
+    do_test(
         || {
             run_command(
                 "mdbook",
-                &["test", "-L", "../target/debug", "-L", "../target/debug/deps"],
+                &[
+                    "test",
+                    "-L",
+                    "../target/debug",
+                    "-L",
+                    "../target/debug/deps",
+                    "-L",
+                    "../firmware/target/debug",
+                    "-L",
+                    "../firmware/target/debug/deps",
+                ],
                 Some("book"),
                 // logging macros need this but mdbook, not being Cargo, doesn't set the env var so
                 // we use a dummy value

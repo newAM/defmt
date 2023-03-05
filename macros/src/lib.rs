@@ -34,7 +34,7 @@ pub fn panic_handler(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /* # Derives */
-#[proc_macro_derive(Format)]
+#[proc_macro_derive(Format, attributes(defmt))]
 #[proc_macro_error]
 pub fn format(input: TokenStream) -> TokenStream {
     derives::format::expand(input)
@@ -156,7 +156,7 @@ pub fn error(args: TokenStream) -> TokenStream {
 #[proc_macro_error]
 pub fn panic_(args: TokenStream) -> TokenStream {
     function_like::panic_like::expand(args, "panicked at 'explicit panic'", |format_string| {
-        format!("panicked at '{}'", format_string)
+        format!("panicked at '{format_string}'")
     })
 }
 
@@ -164,7 +164,7 @@ pub fn panic_(args: TokenStream) -> TokenStream {
 #[proc_macro_error]
 pub fn todo_(args: TokenStream) -> TokenStream {
     function_like::panic_like::expand(args, "panicked at 'not yet implemented'", |format_string| {
-        format!("panicked at 'not yet implemented: {}'", format_string)
+        format!("panicked at 'not yet implemented: {format_string}'")
     })
 }
 

@@ -32,7 +32,7 @@ impl<'t, 'b> Decoder<'t, 'b> {
         let index = self.bytes.read_u16::<LE>()? as usize;
         let format = self
             .table
-            .get_without_level(index as usize)
+            .get_without_level(index)
             .map_err(|_| DecodeError::Malformed)?;
 
         Ok(format)
@@ -115,7 +115,7 @@ impl<'t, 'b> Decoder<'t, 'b> {
                 Type::U16 => args.push(Arg::Uxx(self.bytes.read_u16::<LE>()? as u128)),
                 Type::U32 => args.push(Arg::Uxx(self.bytes.read_u32::<LE>()? as u128)),
                 Type::U64 => args.push(Arg::Uxx(self.bytes.read_u64::<LE>()? as u128)),
-                Type::U128 => args.push(Arg::Uxx(self.bytes.read_u128::<LE>()? as u128)),
+                Type::U128 => args.push(Arg::Uxx(self.bytes.read_u128::<LE>()?)),
                 Type::Usize => args.push(Arg::Uxx(self.bytes.read_u32::<LE>()? as u128)),
                 Type::F32 => args.push(Arg::F32(f32::from_bits(self.bytes.read_u32::<LE>()?))),
                 Type::F64 => args.push(Arg::F64(f64::from_bits(self.bytes.read_u64::<LE>()?))),
@@ -149,17 +149,16 @@ impl<'t, 'b> Decoder<'t, 'b> {
                     }
                 }
                 Type::BitField(range) => {
-                    let mut data: u128;
                     let lowest_byte = range.start / 8;
                     let highest_byte = (range.end - 1) / 8; // -1, because `range` is range-exclusive
                     let size_after_truncation = highest_byte - lowest_byte + 1; // in octets
 
-                    data = match size_after_truncation {
+                    let mut data = match size_after_truncation {
                         1 => self.bytes.read_u8()? as u128,
                         2 => self.bytes.read_u16::<LE>()? as u128,
                         3..=4 => self.bytes.read_u32::<LE>()? as u128,
                         5..=8 => self.bytes.read_u64::<LE>()? as u128,
-                        9..=16 => self.bytes.read_u128::<LE>()? as u128,
+                        9..=16 => self.bytes.read_u128::<LE>()?,
                         _ => unreachable!(),
                     };
 
@@ -187,7 +186,7 @@ impl<'t, 'b> Decoder<'t, 'b> {
 
                     let string = self
                         .table
-                        .get_without_level(str_index as usize)
+                        .get_without_level(str_index)
                         .map_err(|_| DecodeError::Malformed)?;
 
                     args.push(Arg::IStr(string));
@@ -244,7 +243,7 @@ impl<'t, 'b> Decoder<'t, 'b> {
 
                         let format = self
                             .table
-                            .get_without_level(index as usize)
+                            .get_without_level(index)
                             .map_err(|_| DecodeError::Malformed)?;
 
                         let inner_args = self.decode_format(format)?;

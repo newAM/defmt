@@ -5,12 +5,16 @@ use core::{
 
 use crate::{consts::BUF_SIZE, MODE_BLOCK_IF_FULL, MODE_MASK};
 
+/// RTT Up channel
 #[repr(C)]
 pub(crate) struct Channel {
     pub name: *const u8,
+    /// Pointer to the RTT buffer.
     pub buffer: *mut u8,
     pub size: usize,
+    /// Written by the target.
     pub write: AtomicUsize,
+    /// Written by the host.
     pub read: AtomicUsize,
     /// Channel properties.
     ///
@@ -23,8 +27,8 @@ impl Channel {
         // the host-connection-status is only modified after RAM initialization while the device is
         // halted, so we only need to check it once before the write-loop
         let write = match self.host_is_connected() {
-            true => Channel::blocking_write,
-            false => Channel::nonblocking_write,
+            true => Self::blocking_write,
+            false => Self::nonblocking_write,
         };
 
         while !bytes.is_empty() {
@@ -40,46 +44,30 @@ impl Channel {
             return 0;
         }
 
+        // calculate how much space is left in the buffer
         let read = self.read.load(Ordering::Relaxed);
         let write = self.write.load(Ordering::Acquire);
-        let available = if read > write {
-            read - write - 1
-        } else if read == 0 {
-            BUF_SIZE - write - 1
-        } else {
-            BUF_SIZE - write
-        };
+        let available = available_buffer_size(read, write);
 
+        // abort if buffer is full
         if available == 0 {
             return 0;
         }
 
-        let cursor = write;
-        let len = bytes.len().min(available);
-
-        unsafe {
-            if cursor + len > BUF_SIZE {
-                // split memcpy
-                let pivot = BUF_SIZE - cursor;
-                ptr::copy_nonoverlapping(bytes.as_ptr(), self.buffer.add(cursor), pivot);
-                ptr::copy_nonoverlapping(bytes.as_ptr().add(pivot), self.buffer, len - pivot);
-            } else {
-                // single memcpy
-                ptr::copy_nonoverlapping(bytes.as_ptr(), self.buffer.add(cursor), len);
-            }
-        }
-        self.write
-            .store(write.wrapping_add(len) % BUF_SIZE, Ordering::Release);
-
-        len
+        self.write_impl(bytes, write, available)
     }
 
     fn nonblocking_write(&self, bytes: &[u8]) -> usize {
         let write = self.write.load(Ordering::Acquire);
-        let cursor = write;
-        // NOTE truncate atBUF_SIZE to avoid more than one "wrap-around" in a single `write` call
-        let len = bytes.len().min(BUF_SIZE);
 
+        // NOTE truncate at BUF_SIZE to avoid more than one "wrap-around" in a single `write` call
+        self.write_impl(bytes, write, BUF_SIZE)
+    }
+
+    fn write_impl(&self, bytes: &[u8], cursor: usize, available: usize) -> usize {
+        let len = bytes.len().min(available);
+
+        // copy `bytes[..len]` to the RTT buffer
         unsafe {
             if cursor + len > BUF_SIZE {
                 // split memcpy
@@ -91,9 +79,12 @@ impl Channel {
                 ptr::copy_nonoverlapping(bytes.as_ptr(), self.buffer.add(cursor), len);
             }
         }
-        self.write
-            .store(write.wrapping_add(len) % BUF_SIZE, Ordering::Release);
 
+        // adjust the write pointer, so the host knows that there is new data
+        self.write
+            .store(cursor.wrapping_add(len) % BUF_SIZE, Ordering::Release);
+
+        // return the number of bytes written
         len
     }
 
@@ -112,5 +103,16 @@ impl Channel {
     fn host_is_connected(&self) -> bool {
         // we assume that a host is connected if we are in blocking-mode. this is what probe-run does.
         self.flags.load(Ordering::Relaxed) & MODE_MASK == MODE_BLOCK_IF_FULL
+    }
+}
+
+/// How much space is left in the buffer?
+fn available_buffer_size(read_cursor: usize, write_cursor: usize) -> usize {
+    if read_cursor > write_cursor {
+        read_cursor - write_cursor - 1
+    } else if read_cursor == 0 {
+        BUF_SIZE - write_cursor - 1
+    } else {
+        BUF_SIZE - write_cursor
     }
 }
